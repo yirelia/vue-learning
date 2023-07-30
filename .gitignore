@@ -1,3 +1,8 @@
 # Build folder and log file
 build/
 build.log
+
+# depan
+node_modules/
+
+# dist
