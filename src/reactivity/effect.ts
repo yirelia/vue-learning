@@ -1,3 +1,5 @@
+
+
 /*
  * @Author: yang 17368465776@163.com
  * @Date: 2023-07-30 10:09:33
@@ -9,7 +11,13 @@
 export let activeEffect
 const effectStack = []
 const bucket  = new WeakMap()
+const reactiveMap = new Map()
 
+enum TriggerType  {
+    SET =  'set',
+    ADD =  'add',
+    DELETE = 'delete'
+}
 /**
  * @description: 依赖追踪
  * @param {*} target
@@ -38,12 +46,13 @@ function track(target, key) {
  * @param {*} key
  * @return {*}
  */
-function trigger(target, key) {
+function trigger(target, key, type?, newVal?) {
     const depsMap = bucket.get(target)
     if(!depsMap) {
         return 
     }
     const effects = depsMap.get(key)
+    console.log('key is',key,effects)
     const effectToRun = new Set()
     effects && effects.forEach(effectFn => {
         // trigger 触发执行的副作用函数与当前正在执行的副作用函数形同，则不出发执行
@@ -51,6 +60,42 @@ function trigger(target, key) {
         effectToRun.add(effectFn)
         }
     })
+    if(type === TriggerType.ADD || type === TriggerType.DELETE) {
+        const iterateEffects = depsMap.get(ITERATE_KEY)
+            // 触发 
+        iterateEffects && iterateEffects.forEach(effectFn => {
+        // trigger 触发执行的副作用函数与当前正在执行的副作用函数形同，则不出发执行
+        if(effectFn !== activeEffect) {
+        effectToRun.add(effectFn)
+        } else {
+            console.log('effecFn is Same')
+        }
+    })
+    }
+    if(type === TriggerType.ADD && Array.isArray(target)) {
+        const lengthEffects = depsMap.get('length')
+        lengthEffects && lengthEffects.forEach(effectFn => {
+            if(effectFn !== activeEffect) {
+                effectToRun.add(effectFn)
+            }
+        })
+    }
+
+    if(Array.isArray(target) && key === 'length') {
+        depsMap.forEach((effects, key) => {
+            if(key >= newVal) {
+                effects.forEach(effectFn => {
+                    if(effectFn !== activeEffect) {
+                        effectToRun.add(effectFn)
+                    }
+                })
+            }
+        })
+    }
+
+
+
+
    effectToRun.forEach(effectFn => {
     // 运行调度器
     if(effectFn.options.scheduler) {
@@ -60,24 +105,99 @@ function trigger(target, key) {
     }
     })
 }
+const ITERATE_KEY = Symbol()
 
-const obj = {
-    name: 'simtek',
-    foo: 1,
-    bar: 2
+const applyInstrumentations = {
+    includes: function() {}
 }
-export const proxyObj = new Proxy(obj, {
-    get(target, key) {
-        track(target, key)
-        return target[key]
-    },
-    set(target, key, newVal) {
-        target[key] = newVal
-        trigger(target, key)
-        return true
-    }
 
-})
+
+export function createReactive(obj, isShallow = false, isReadonly = false) {
+    return new Proxy(obj, {
+        ownKeys(target) {
+
+            track(target, Array.isArray(target) ? 'length' :  ITERATE_KEY)
+            return Reflect.ownKeys(target)
+        },
+        get(target, key, receiver) {
+            console.log('get', key)
+            // 获取原数据
+            if(key === 'raw') {
+                return target
+            }
+            if(Array.isArray(target) && applyInstrumentations.hasOwnProperty(key)) {
+                return Reflect.get(applyInstrumentations, key, receiver)
+
+            }
+
+            if(!isReadonly && typeof key !== 'symbol') {
+                // 收集依赖
+                track(target, key)
+            }
+
+            const res = Reflect.get(target, key, receiver)
+            if(isShallow) {
+                return res
+            }
+            if(typeof res === 'object' && res !==null) {
+                return isReadonly ? readonly(res) : reactive(res)
+            }
+            return res
+        },
+        has(target, key) {
+            track(target, key)
+            return Reflect.has(target, key)
+        },
+        set(target, key, newVal, receiver) {
+            if(isReadonly) {
+                return true
+            }
+            const oldValue = target[key]
+            const type = Array.isArray(target) ? Number(key) < target.length ?  TriggerType.SET : TriggerType.ADD  : Object.prototype.hasOwnProperty.call(target, key) ? 'SET' : 'ADD'
+            const res = Reflect.set(target, key, newVal, receiver)
+            
+            if(target === receiver.raw) {
+                if(oldValue !== newVal && (oldValue === oldValue || newVal === newVal)) {
+                    trigger(target, key, type, newVal)
+                }
+            }
+
+            return res
+        },
+        deleteProperty(target, key) {
+            if(isReadonly) {
+                return true
+            }
+            const hadKey = Object.prototype.hasOwnProperty.call(target, key)
+            const res = Reflect.deleteProperty(target,key)
+            if(res && hadKey) {
+                trigger(target, key, TriggerType.DELETE)
+            }
+            return res
+        }
+    
+    })
+}
+
+export function reactive(obj) {
+    const exisitionProxy = reactiveMap.get(obj)
+    if(exisitionProxy) {
+        return exisitionProxy
+    }
+    const proxy = createReactive(obj)
+    reactiveMap.set(obj, proxy)
+    return proxy
+}
+
+export function shallowReactive(obj) {
+    return createReactive(obj, true)
+}
+
+export function readonly(obj) {
+    return createReactive(obj, false, true)
+}
+
+
 export function effect(fn, options = {}) {
     const effectFn = () => {
         cleanup(effectFn)
@@ -120,14 +240,6 @@ function flushJob() {
     })
 
 }
-
-effect(() => {
-    console.log(proxyObj.foo)
-}, {scheduler(fn) {
-    console.log('add fn to jobQueue')
-    jobQueue.add(fn)
-    flushJob()
-}})
 
 
 
@@ -205,29 +317,18 @@ function traverse(value, seen = new Set()) {
 
 let finalData
 
-watch(proxyObj, async (newValue, oldValue, onInvalidate) => {
-    // 过期标识
-    let expired = false
-    onInvalidate(() => 
-    {   
-        expired = true
 
-    })
-    const res = await new Promise((resolve, rejcet) => {
-        
-        if(newValue.bar === 3) {
-            setTimeout(() => resolve('first value'),  4 * 1000)
-            
-        } else {
-            resolve(value++)
-        }
-    })
-    console.log(`res is ${res}`)
-    if(!expired) {
-        console.log(`set Res ${res}`)
-        finalData = res
-    }
 
+
+const a = reactive(['foo'])
+
+effect(() => {
+   for(const i in a) {
+    console.log(`====>`,i)
+   }
 })
 
+a[1] = 'bar'
+
+a.length = 0
 
