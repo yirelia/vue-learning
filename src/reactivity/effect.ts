@@ -216,6 +216,17 @@ export function effect(fn, options = {}) {
    return effectFn
 }
 
+export function ref(val) {
+    const wrapper = {
+        value: val
+    }
+
+    Object.defineProperty(wrapper, '__v_isRef', {
+        value: true
+    })
+    return reactive(wrapper)
+}
+
 function cleanup(effectFn) {
     for(let i = 0; i < effectFn.deps.length; i++) {
         const deps = effectFn.deps[i]

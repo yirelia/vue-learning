@@ -19,6 +19,7 @@
   },
   "homepage": "https://github.com/YGodFather/mini-vue-reactive#readme",
   "dependencies": {
+    "@vue/reactivity": "^3.4.21",
     "vite": "^4.4.7"
   },
   "devDependencies": {
