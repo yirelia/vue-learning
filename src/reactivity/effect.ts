@@ -1,23 +1,16 @@
-
-
-/*
- * @Author: yang 17368465776@163.com
- * @Date: 2023-07-30 10:09:33
- * @LastEditors: yang 17368465776@163.com
- * @LastEditTime: 2023-07-30 11:58:46
- * @FilePath: /mini-vue-reactive/src/reactivity/effect.ts
- * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
- */
 export let activeEffect
 const effectStack = []
 const bucket  = new WeakMap()
 const reactiveMap = new Map()
+
 
 enum TriggerType  {
     SET =  'set',
     ADD =  'add',
     DELETE = 'delete'
 }
+
+
 /**
  * @description: 依赖追踪
  * @param {*} target
@@ -115,7 +108,6 @@ const applyInstrumentations = {
 export function createReactive(obj, isShallow = false, isReadonly = false) {
     return new Proxy(obj, {
         ownKeys(target) {
-
             track(target, Array.isArray(target) ? 'length' :  ITERATE_KEY)
             return Reflect.ownKeys(target)
         },
@@ -253,7 +245,6 @@ function flushJob() {
 }
 
 
-
 function computed(getter) {
     let value
     // 脏数据的标志值
@@ -326,20 +317,5 @@ function traverse(value, seen = new Set()) {
     return value
 }
 
-let finalData
 
-
-
-
-const a = reactive(['foo'])
-
-effect(() => {
-   for(const i in a) {
-    console.log(`====>`,i)
-   }
-})
-
-a[1] = 'bar'
-
-a.length = 0
 
