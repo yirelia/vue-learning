@@ -1,0 +1,12 @@
+<html>
+    <div id="app"></div>
+    <script>
+        function renderer(domString, container) {
+            container.innerHTML = domString;
+        }
+
+        renderer(`<h1>Hello World</h1>`, document.getElementById('app'));
+        const count = 1
+        renderer(`<h1>${count}</h1>`, document.getElementById('app'));
+    </script>
+</html>
