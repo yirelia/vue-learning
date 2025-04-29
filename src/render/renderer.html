@@ -3,25 +3,9 @@
   <script src="https://unpkg.com/@vue/reactivity@3.0.5/dist/reactivity.global.js"></script>
   <script>
     const { effect, ref } = VueReactivity;
-
-    const vnode = {
-      type: `p`,
-      props: {
-        id: `foo`,
-        onClick: [
-          () => {
-            alert("clicked1");
-          },
-          () => {
-            alert("clicked2");
-          },
-        ],
-        onContextmenu: () => {
-          alert("contextmenu clicked");
-        },
-      },
-      children: `click`,
-    };
+    const Text = Symbol();
+    const Comment = Symbol();
+    const Fragment = Symbol();
 
     function shouldSetAsProps(el, key, value) {
       if (key === "form" && el.tagName === "INPUT") {
@@ -63,14 +47,21 @@
           // 组件类型
         } else if (type === Text) {
           // 其他类型
-          if(!n1) {
-            const el = n2.el = document.createTextNode(n2.children)
-            insert(el, container)
+          if (!n1) {
+            const el = (n2.el = document.createTextNode(n2.children));
+            insert(el, container);
           } else {
-            const el = n2.el = n1.el
-            if(n1.children !== n2.children) {
-              el.nodeValue = n2.children
-            }  
+            const el = (n2.el = n1.el);
+            if (n1.children !== n2.children) {
+              el.nodeValue = n2.children;
+            }
+          }
+        } else if (type === Fragment) {
+          if (!n1) {
+            n2.children.forEach((c) => patch(null, c, container));
+          } else {
+            // 更新 Fragment
+            patchChildren(n1, n2, container);
           }
         }
       }
@@ -96,6 +87,10 @@
       }
 
       function unmount(vnode) {
+        if (vnode.type === Fragment) {
+          vnode.children.forEach((c) => unmount(c));
+          return;
+        }
         const el = vnode.el;
         const parent = el.parentNode;
         if (parent) {
@@ -103,52 +98,55 @@
         }
       }
 
-      function patchElement (n1, n2) {
-        const el = n2.el = n1.el
-        const oldProps = n1.props
-        const newProps = n2.props
+      function patchElement(n1, n2) {
+        const el = (n2.el = n1.el);
+        const oldProps = n1.props;
+        const newProps = n2.props;
 
-        for(const key in newProps) {
+        for (const key in newProps) {
           if (newProps[key] !== oldProps[key]) {
-            patchProps(el, key, oldProps[key], newProps[key])
+            patchProps(el, key, oldProps[key], newProps[key]);
           }
         }
 
-        for(const key in oldProps) {
-          if(!(key in newProps)) {
-            patchProps(el, key, oldProps[key], null)
+        for (const key in oldProps) {
+          if (!(key in newProps)) {
+            patchProps(el, key, oldProps[key], null);
           }
         }
 
-        patchChildren(n1, n2, el) 
+        patchChildren(n1, n2, el);
       }
 
       function patchChildren(n1, n2, container) {
-        if(typeof n2.children === 'string') {
-          if(Array.isArray(n1.children)) {
-            n1.children.forEach((c) => unmount(c))
+        if (typeof n2.children === "string") {
+          if (Array.isArray(n1.children)) {
+            n1.children.forEach((c) => unmount(c));
           }
 
-          setElementText(container, n2.children)
-
-        } else if(Array.isArray(n2.children)){
-          // DIFF 算法
-          if(Array.isArray(n1.children)) {
-            n1.children.forEach((c) => unmount(c))
-            n2.children.forEach((c) => patch(null, c, container))
-            // DIFF 算法
-          } else {
-            setElementText(container, '')
-            n2.children.forEach(c => patch(null, c, container))
+          setElementText(container, n2.children);
+        } else if (Array.isArray(n2.children)) {
+          const oldChildren = n1.children
+          const newChildren = n2.children
+          for(let i = 0; i < oldChildren.length; i++) {
+            patch(oldChildren[i], newChildren[i], container)
           }
+          // // DIFF 算法
+          // if (Array.isArray(n1.children)) {
+          //   n1.children.forEach((c) => unmount(c));
+          //   n2.children.forEach((c) => patch(null, c, container));
+          //   // DIFF 算法
+          // } else {
+          //   setElementText(container, "");
+          //   n2.children.forEach((c) => patch(null, c, container));
+          // }
         } else {
-          if(Array.isArray(n1.children)) {
-            n1.children.forEach(c => unmount(c))
-          } else if(typeof n1.children === 'string') {
-            setElementText(container, '')
+          if (Array.isArray(n1.children)) {
+            n1.children.forEach((c) => unmount(c));
+          } else if (typeof n1.children === "string") {
+            setElementText(container, "");
           }
         }
-      
       }
 
       return {
@@ -169,8 +167,8 @@
           if (nextValue) {
             if (!invoker) {
               invoker = el._vei[key] = (e) => {
-                if(e.timeStamp < invoker.attached) {
-                  return
+                if (e.timeStamp < invoker.attached) {
+                  return;
                 }
                 if (Array.isArray(invoker.value)) {
                   invoker.value.forEach((fn) => fn(e));
@@ -205,30 +203,26 @@
       },
     });
     const bol = ref(false);
-    const Text = Symbol()
-    const Comment = Symbol()
+
     effect(() => {
-        const vnode = {
-          type: 'div',
-          props: bol.value ? {
-            onClick: () => {
-              alert('父元素clicked')
-            }
-          }: {},
-          children: [
-            {
-              type: 'p',
-              props: {
-                onClick: () => {
-                  alert('子元素clicked')
-                  bol.value = true
-                }
-              },
-              children: '子元素'
-            }
-          ]
-        }
-        renderer.render(vnode, document.getElementById("app"));
-    })
+      const vnode = {
+        type: Fragment,
+        children: [
+          {
+            type: "li",
+            children: `li1`,
+          },
+          {
+            type: "li",
+            children: `li2`,
+          },
+          {
+            type: "li",
+            children: `li3`,
+          },
+        ],
+      };
+      renderer.render(vnode, document.getElementById("app"));
+    });
   </script>
 </html>
