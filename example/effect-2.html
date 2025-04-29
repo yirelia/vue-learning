@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Vite + Vue + TS</title>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script >
+      const bucket = new Set()
+      // 全局收集函数
+      let activeEffect = null
+      const obj =  {text: 'hello world'}
+      const proxyObj = new Proxy (obj, {
+        get(target,  key) {
+          // 依赖收集
+            bucket.add(activeEffect)
+            return target[key]
+        },
+        set(target, key, value) {
+            target[key] = value
+            for (const effect of bucket) {
+              effect()
+            }
+            return true
+        }
+      })
+      const f3 = () => {
+        const app = document.getElementById('app')
+        // 此处需要从代理对象拿值
+        console.log(proxyObj.text)
+        app.innerHTML = proxyObj.text
+      }
+
+      const f2 = () => {
+       console.log(proxyObj.name)
+      }
+      
+      const effect = (fn) => {
+        activeEffect = fn
+        fn()
+      }
+      effect(f3)
+      effect(f2)
+      console.log(bucket)
+
+      setTimeout(() => {
+        proxyObj.text = 'value is changed'
+      }, 2000)
+      
+
+      setTimeout(() => {
+        proxyObj.name = '1111'
+      }, 4000)
+
+    </script>
+  </body>
+</html>

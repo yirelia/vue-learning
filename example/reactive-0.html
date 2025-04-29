@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Vite + Vue + TS</title>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script>
+      /**
+       * @description: 依赖收集
+       * @param {*} target
+       * @param {*} key
+       * @return {*}
+       */
+      function track(target, key) {
+        let depMap = bucket.get(target);
+        if (!depMap) {
+          bucket.set(target, (depMap = new Map()));
+        }
+        let deps = depMap.get(key);
+        if (!deps) {
+          depMap.set(key, (deps = new Set()));
+        }
+        deps.add(activeEffect);
+      }
+
+      function trigger(target, key) {
+        const depMap = bucket.get(target);
+        const effectFns = depMap.get(key);
+        effectFns.forEach((effect) => effect());
+      }
+
+      const bucket = new WeakMap();
+
+      // 全局收集函数
+      let activeEffect = null;
+
+      const effect = (fn) => {
+        activeEffect = fn;
+        fn();
+      };
+      const reactive = (target) => {
+        return new Proxy(obj, {
+          get(target, key) {
+            // 触发依赖追踪
+            track(target, key);
+            const val = target[key];
+            if(typeof val === 'object') {
+              return reactive(val)
+            }
+            return target[key];
+          },
+          set(target, key, value) {
+            target[key] = value;
+            // 触发依赖追踪
+            trigger(target, key);
+            return true;
+          },
+        });
+      };
+
+
+ 
+
+      const obj = {
+        text: "hello world",
+        name: "test",
+        list: [],
+        obj: {
+          name: 'test'
+        }
+      };
+      const proxyObj = reactive(obj);
+      const fn = () => {
+        // const app = document.getElementById("app");
+        // // 此处需要从代理对象拿值
+        // app.innerHTML = `${proxyObj.name}: ${proxyObj.text}`;
+        return proxyObj.text === '1' ? proxyObj.name : proxyObj.text
+      };
+
+
+
+      effect(fn);
+      setTimeout(() => {
+        proxyObj.text = "value is changed";
+      }, 2000);
+      setTimeout(() => {
+        proxyObj.name = "name is changed";
+      }, 4000);
+    </script>
+  </body>
+</html>
